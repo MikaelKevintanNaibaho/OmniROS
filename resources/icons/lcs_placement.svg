@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+    <!-- Background circle for better visibility -->
+    <circle cx="32" cy="32" r="30" fill="#f0f0f0" stroke="#666" stroke-width="1" />
+
+    <!-- Origin point -->
+    <circle cx="32" cy="32" r="3" fill="#333" />
+
+    <!-- Z-axis (Blue) - drawn first so it appears behind -->
+    <defs>
+        <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"
+            markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#2196F3" />
+        </marker>
+        <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"
+            markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#F44336" />
+        </marker>
+        <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"
+            markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#4CAF50" />
+        </marker>
+    </defs>
+
+    <!-- Z-axis (Blue) - pointing up -->
+    <line x1="32" y1="32" x2="32" y2="8" stroke="#2196F3" stroke-width="3"
+        marker-end="url(#arrowBlue)" />
+    <text x="34" y="6" font-family="Arial, sans-serif" font-size="12" font-weight="bold"
+        fill="#2196F3">Z</text>
+
+    <!-- X-axis (Red) - pointing right and slightly down for perspective -->
+    <line x1="32" y1="32" x2="54" y2="38" stroke="#F44336" stroke-width="3"
+        marker-end="url(#arrowRed)" />
+    <text x="56" y="40" font-family="Arial, sans-serif" font-size="12" font-weight="bold"
+        fill="#F44336">X</text>
+
+    <!-- Y-axis (Green) - pointing left and slightly down for perspective -->
+    <line x1="32" y1="32" x2="10" y2="38" stroke="#4CAF50" stroke-width="3"
+        marker-end="url(#arrowGreen)" />
+    <text x="4" y="40" font-family="Arial, sans-serif" font-size="12" font-weight="bold"
+        fill="#4CAF50">Y</text>
+
+    <!-- Small placement grid indicator in corner -->
+    <g opacity="0.4">
+        <line x1="48" y1="52" x2="56" y2="52" stroke="#666" stroke-width="0.5" />
+        <line x1="48" y1="56" x2="56" y2="56" stroke="#666" stroke-width="0.5" />
+        <line x1="48" y1="60" x2="56" y2="60" stroke="#666" stroke-width="0.5" />
+        <line x1="48" y1="52" x2="48" y2="60" stroke="#666" stroke-width="0.5" />
+        <line x1="52" y1="52" x2="52" y2="60" stroke="#666" stroke-width="0.5" />
+        <line x1="56" y1="52" x2="56" y2="60" stroke="#666" stroke-width="0.5" />
+    </g>
+</svg>
