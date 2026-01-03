@@ -1,11 +1,21 @@
 # gui/cmd_create_link.py
+"""
+Create Link Command - Creates visual/collision representations from geometry.
+"""
+
 import FreeCAD
 import FreeCADGui
 from PySide.QtCore import QT_TRANSLATE_NOOP
-from PySide.QtWidgets import QInputDialog, QMessageBox
+from utils.dialogs import get_validated_name, show_error, show_warning
 
 
 class CreateLinkCommand:
+    # Valid source object types
+    VALID_TYPES = ("PartDesign::Body", "Part::Feature", "App::Part")
+
+    # Valid shape types for export
+    VALID_SHAPES = ("Solid", "CompSolid", "Compound")
+
     def GetResources(self):
         return {
             "Pixmap": "create_link.svg",
@@ -17,68 +27,66 @@ class CreateLinkCommand:
 
     def Activated(self):
         sel = FreeCADGui.Selection.getSelection()
+
         if not sel:
             FreeCAD.Console.PrintError("[OmniROS] Please select a body or part\n")
             return
 
         obj = sel[0]
 
-        # FIX 1: Allow App::Part
-        valid_types = ("PartDesign::Body", "Part::Feature", "App::Part")
-
-        if obj.TypeId not in valid_types:
-            QMessageBox.critical(
-                FreeCADGui.getMainWindow(),
+        # Validate object type
+        if obj.TypeId not in self.VALID_TYPES:
+            show_error(
                 "Invalid Selection",
-                f"Selected object is '{obj.TypeId}'.\nPlease select a Body, Part, or Std Part.",
+                f"Selected object is '{obj.TypeId}'.\n"
+                f"Please select a Body, Part, or Std Part.",
             )
             return
 
-        # FIX 2: Relax geometry check to allow Compounds (App::Part is always Compound)
-        if hasattr(obj, "Shape") and not obj.Shape.isNull():
-            # We allow Solid, CompSolid, and Compound (common for imported STEP files or App::Part)
-            valid_shapes = ("Solid", "CompSolid", "Compound")
-            if obj.Shape.ShapeType not in valid_shapes:
-                QMessageBox.warning(
-                    FreeCADGui.getMainWindow(),
-                    "Geometry Warning",
-                    f"Selected object is a '{obj.Shape.ShapeType}'. It might not export correctly if it's not solid.",
-                )
-        else:
-            QMessageBox.critical(
-                FreeCADGui.getMainWindow(),
-                "Invalid Geometry",
-                "Selected object has no geometry.",
-            )
+        # Validate geometry
+        if not self._validate_geometry(obj):
             return
 
-        name, ok = QInputDialog.getText(
-            FreeCADGui.getMainWindow(),
-            "OmniROS - Link Name",
-            "Enter link name (e.g., 'arm_link'):",
+        # Get link name from user
+        link_name = get_validated_name(
+            "OmniROS - Link Name", "Enter link name (e.g., 'arm_link'):"
         )
-        if not (ok and name.strip()):
+        if not link_name:
             return
 
-        link_name = name.strip()
-        if not link_name.replace("_", "").isalnum():
-            QMessageBox.warning(
-                FreeCADGui.getMainWindow(),
-                "Invalid Name",
-                "Link name can only contain letters, numbers, and underscores.",
-            )
-            return
-
+        # Create the link
         try:
             from core.link_factory import create_link_from_object
 
-            results = create_link_from_object(obj, link_name)
+            create_link_from_object(obj, link_name)
             FreeCAD.Console.PrintMessage(f"[OmniROS] Created link '{link_name}'\n")
         except Exception as e:
             FreeCAD.Console.PrintError(f"[OmniROS] Link creation failed: {e}\n")
             import traceback
 
             FreeCAD.Console.PrintError(traceback.format_exc())
+
+    def _validate_geometry(self, obj):
+        """
+        Validate that object has proper geometry.
+
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if not hasattr(obj, "Shape") or obj.Shape.isNull():
+            show_error("Invalid Geometry", "Selected object has no geometry.")
+            return False
+
+        # Check shape type
+        if obj.Shape.ShapeType not in self.VALID_SHAPES:
+            show_warning(
+                "Geometry Warning",
+                f"Selected object is a '{obj.Shape.ShapeType}'. "
+                "It might not export correctly if it's not solid.",
+            )
+            # Still return True to allow user to proceed
+
+        return True
 
     def IsActive(self):
         return FreeCAD.ActiveDocument is not None

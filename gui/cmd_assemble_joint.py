@@ -7,118 +7,9 @@ Assemble Joint Command
 import FreeCAD
 import FreeCADGui
 from PySide.QtCore import QT_TRANSLATE_NOOP
-from PySide.QtWidgets import QMessageBox, QInputDialog
-
-
-def get_link_and_local_placement(lcs_obj):
-    """
-    Walks up the tree from the LCS to find the first App::Part (Link Container).
-    Accumulates the placement of all intermediate objects (like Bodies).
-
-    Returns:
-        (App::Part, Placement): The container and the LCS's placement relative to it.
-    """
-    if not lcs_obj:
-        return None, None
-
-    current_obj = lcs_obj
-    accumulated_placement = lcs_obj.Placement
-    found_link = None
-
-    # Limit depth to prevent infinite loops
-    for _ in range(10):
-        parents = current_obj.InList
-        if not parents:
-            break
-
-        parent = parents[0]
-
-        # If we hit the App::Part, we are done
-        if parent.TypeId == "App::Part":
-            found_link = parent
-            break
-
-        # If it's an intermediate container (like a Body), accumulate placement
-        if hasattr(parent, "Placement"):
-            accumulated_placement = parent.Placement.multiply(accumulated_placement)
-
-        current_obj = parent
-
-    return found_link, accumulated_placement
-
-
-class RosJointProxy:
-    """Proxy class to handle the Joint Object behavior."""
-
-    def __init__(self, obj):
-        obj.Proxy = self
-
-    def execute(self, obj):
-        return
-
-    def onDocumentRestored(self, obj):
-        pass
-
-
-class RosJointViewProxy:
-    """Proxy class for the View Provider (Icon)."""
-
-    def __init__(self, vobj):
-        vobj.Proxy = self
-
-    def getIcon(self):
-        return ":/icons/preferences-system.svg"
-
-    def attach(self, vobj):
-        return
-
-    def updateData(self, obj, prop):
-        return
-
-
-def create_joint_object(parent_link, child_link, joint_name, joint_type):
-    """
-    Creates a Joint object in the tree with proper properties.
-
-    Args:
-        parent_link: App::Part representing the parent link
-        child_link: App::Part representing the child link
-        joint_name: Name for the joint
-        joint_type: Type of joint (revolute, fixed, etc.)
-
-    Returns:
-        The created joint object
-    """
-    doc = FreeCAD.ActiveDocument
-
-    # Create the Joint Object
-    joint_obj = doc.addObject("App::FeaturePython", joint_name)
-    joint_obj.Label = joint_name
-
-    # Attach Logic & View Proxies
-    RosJointProxy(joint_obj)
-    RosJointViewProxy(joint_obj.ViewObject)
-
-    # Add Custom Properties
-    joint_obj.addProperty(
-        "App::PropertyLink", "ParentLink", "ROS Config"
-    ).ParentLink = parent_link
-    joint_obj.addProperty(
-        "App::PropertyLink", "ChildLink", "ROS Config"
-    ).ChildLink = child_link
-    joint_obj.addProperty(
-        "App::PropertyString", "JointType", "ROS Config"
-    ).JointType = joint_type
-
-    # Move Joint object into the "ROS_Joints" group
-    joints_group = doc.getObject("ROS_Joints")
-    if not joints_group:
-        joints_group = doc.addObject("App::DocumentObjectGroup", "ROS_Joints")
-        joints_group.Label = "ROS_Joints"
-
-    joints_group.addObject(joint_obj)
-
-    return joint_obj
+from utils.hierarchy import get_link_and_local_placement
+from utils.dialogs import get_choice_input, get_validated_name, show_warning, show_error
+from core.joint_factory import create_joint, generate_joint_name, JOINT_TYPES
 
 
 class AssembleJointCommand:
@@ -136,9 +27,10 @@ class AssembleJointCommand:
 
     def Activated(self):
         sel = FreeCADGui.Selection.getSelection()
+
+        # Validate selection
         if len(sel) != 2:
-            QMessageBox.warning(
-                None,
+            show_warning(
                 "Selection Error",
                 "Please select exactly two LCS frames:\n"
                 "1. Target LCS (Where it goes - Parent)\n"
@@ -153,20 +45,17 @@ class AssembleJointCommand:
             target_lcs.TypeId != "PartDesign::CoordinateSystem"
             or source_lcs.TypeId != "PartDesign::CoordinateSystem"
         ):
-            QMessageBox.warning(
-                None,
-                "Type Error",
-                "Both selections must be Local Coordinate Systems (LCS).",
+            show_warning(
+                "Type Error", "Both selections must be Local Coordinate Systems (LCS)."
             )
             return
 
-        # 1. Resolve Parent and Child Links
+        # Resolve parent and child links
         parent_link, _ = get_link_and_local_placement(target_lcs)
         child_link, child_lcs_local = get_link_and_local_placement(source_lcs)
 
         if not parent_link or not child_link:
-            QMessageBox.critical(
-                None,
+            show_error(
                 "Hierarchy Error",
                 "Could not find App::Part containers for both LCS frames.\n"
                 "Ensure both LCS are inside Links created by OmniROS.",
@@ -174,47 +63,31 @@ class AssembleJointCommand:
             return
 
         if parent_link == child_link:
-            QMessageBox.warning(
-                None,
+            show_warning(
                 "Error",
                 "Both LCS frames are in the same link. Please select LCS from different links.",
             )
             return
 
-        # 2. Get Joint Configuration from User
-        joint_types = [
-            "revolute",
-            "fixed",
-            "prismatic",
-            "continuous",
-            "floating",
-            "planar",
-        ]
-
-        j_type, ok = QInputDialog.getItem(
-            None,
+        # Get joint type from user
+        joint_type, ok = get_choice_input(
             "Joint Type",
             "Select Joint Type:",
-            joint_types,
-            0,  # Default to "revolute"
-            False,
+            JOINT_TYPES,
+            default_index=0,  # "revolute"
         )
         if not ok:
             return
 
-        # Generate smart default name
-        child_name = child_link.Label.replace("_link", "")
-        default_name = f"joint_{child_name}"
-
-        j_name, ok = QInputDialog.getText(
-            None, "Joint Name", "Joint Name:", text=default_name
+        # Get joint name from user
+        default_name = generate_joint_name(child_link)
+        joint_name = get_validated_name(
+            "Joint Name", "Joint Name:", default_text=default_name
         )
-        if not ok or not j_name.strip():
+        if not joint_name:
             return
 
-        joint_name = j_name.strip()
-
-        # 3. Perform Alignment
+        # Perform alignment and create joint
         try:
             FreeCAD.ActiveDocument.openTransaction("Assemble Joint")
 
@@ -223,14 +96,13 @@ class AssembleJointCommand:
             new_link_placement = target_global.multiply(child_lcs_local.inverse())
             child_link.Placement = new_link_placement
 
-            # 4. Create Joint Object
-            joint_obj = create_joint_object(parent_link, child_link, joint_name, j_type)
+            # Create joint object
+            create_joint(parent_link, child_link, joint_name, joint_type)
 
             FreeCAD.ActiveDocument.commitTransaction()
 
             FreeCAD.Console.PrintMessage(
                 f"[OmniROS] ✓ Aligned '{child_link.Label}' to '{parent_link.Label}'\n"
-                f"[OmniROS] ✓ Created Joint '{joint_name}' ({j_type})\n"
             )
 
             FreeCADGui.updateGui()
