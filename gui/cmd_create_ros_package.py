@@ -2,7 +2,7 @@
 import FreeCAD
 import FreeCADGui
 import os
-from PySide.QtCore import QT_TRANSLATE_NOOP
+from PySide.QtCore import QT_TRANSLATE_NOOP, Qt
 from PySide.QtWidgets import (
     QFileDialog,
     QLineEdit,
@@ -11,8 +11,10 @@ from PySide.QtWidgets import (
     QLabel,
     QDialogButtonBox,
     QMessageBox,
+    QApplication,
 )
-from core.ros2_package_generator import create_ros2_package
+from utils.dialogs import show_warning, show_error
+from core.ros2_package_generator import organize_package
 
 
 class CreateRosPackageCommand:
@@ -22,55 +24,133 @@ class CreateRosPackageCommand:
             "MenuText": QT_TRANSLATE_NOOP("OmniROS", "Create ROS 2 Package"),
             "ToolTip": QT_TRANSLATE_NOOP(
                 "OmniROS",
-                "Generate a ROS 2 package for this robot in a custom workspace",
+                "Export robot and generate a complete ROS 2 package",
             ),
         }
 
     def Activated(self):
-        # Get last exported URDF path
-        param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/OmniROS")
-        urdf_path = param.GetString("LastExportUrdfPath", "")
-        if not urdf_path or not os.path.isfile(urdf_path):
-            FreeCAD.Console.PrintError(
-                "[OmniROS] No recent URDF export found. Please export first.\n"
-            )
+        # 1. Select Robot (Reusing logic logic)
+        robot = self._get_selected_robot()
+        if not robot:
             return
 
-        meshes_dir = os.path.join(os.path.dirname(urdf_path), "meshes")
-        robot_name = os.path.splitext(os.path.basename(urdf_path))[0]
+        # 2. Select Workspace Root (e.g. ~/ros2_ws)
+        last_ws = FreeCAD.ParamGet(
+            "User parameter:BaseApp/Preferences/Mod/OmniROS"
+        ).GetString("LastWorkspacePath", os.path.expanduser("~"))
 
-        # Ask user to select **workspace root directory** (e.g., ~/my_robot_ws)
-        default_ws = os.path.expanduser(f"~/{robot_name}_ws")
         workspace_root = QFileDialog.getExistingDirectory(
             None,
-            "Select ROS 2 Workspace Root Directory",
-            default_ws,  # suggest a sensible default
+            "Select ROS 2 Workspace Root (contains 'src' or will be created)",
+            last_ws,
         )
 
         if not workspace_root:
-            return  # user canceled
+            return
 
-        # Auto-create or validate 'src' inside workspace_root
+        FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/OmniROS").SetString(
+            "LastWorkspacePath", workspace_root
+        )
+
+        # Ensure 'src' exists
         src_dir = os.path.join(workspace_root, "src")
         if not os.path.exists(src_dir):
-            try:
-                os.makedirs(src_dir)
-                FreeCAD.Console.PrintMessage(
-                    f"[OmniROS] Created 'src' directory at: {src_dir}\n"
-                )
-            except OSError as e:
-                FreeCAD.Console.PrintError(
-                    f"[OmniROS] Failed to create 'src' directory: {e}\n"
-                )
-                return
+            # Check if user actually selected the src folder itself
+            if os.path.basename(workspace_root) == "src":
+                src_dir = workspace_root
+                workspace_root = os.path.dirname(src_dir)
+            else:
+                try:
+                    os.makedirs(src_dir)
+                except OSError as e:
+                    show_error("Error", f"Could not create 'src' directory:\n{e}")
+                    return
 
-        # Prompt for package name (default: robot_name + '_description')
-        package_name = f"{robot_name}_description"
+        # 3. Get Package Name
+        default_pkg_name = f"{robot.RobotName.lower()}_description"
+        package_name = self._get_package_name_input(default_pkg_name)
+        if not package_name:
+            return
+
+        package_path = os.path.join(src_dir, package_name)
+
+        # 4. Run Export & Generation
+        try:
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+
+            # A. Export Files (URDF + Meshes) directly to package folder
+            from core.exporter import UrdfExporter
+
+            exporter = UrdfExporter(robot)
+
+            # This creates package_path/meshes/ and package_path/robot.urdf
+            urdf_full_path = exporter.export_robot(package_path)
+            urdf_filename = os.path.basename(urdf_full_path)
+
+            # B. Organize into ROS 2 Structure
+            final_urdf = organize_package(package_path, package_name, urdf_filename)
+
+            QApplication.restoreOverrideCursor()
+
+            # Success Message
+            build_cmd = f"colcon build --packages-select {package_name}"
+            FreeCAD.Console.PrintMessage(
+                f"[OmniROS] ✅ Package created: {package_path}\n"
+            )
+
+            msg = (
+                f"ROS 2 Package '{package_name}' created successfully!\n\n"
+                f"Location: {package_path}\n\n"
+                f"Next Steps:\n"
+                f"1. cd {workspace_root}\n"
+                f"2. {build_cmd}\n"
+                f"3. source install/setup.bash\n"
+                f"4. ros2 launch {package_name} display.launch.py"
+            )
+            QMessageBox.information(None, "Package Created", msg)
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            show_error("Package Creation Failed", str(e))
+            FreeCAD.Console.PrintError(f"[OmniROS] Error: {e}\n")
+            import traceback
+
+            FreeCAD.Console.PrintError(traceback.format_exc())
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def _get_selected_robot(self):
+        # ... (Same logic as in Export URDF) ...
+        sel = FreeCADGui.Selection.getSelection()
+        if sel:
+            try:
+                from core.robot_factory import find_parent_robot
+
+                robot = find_parent_robot(sel[0])
+                if robot:
+                    return robot
+            except:
+                pass
+
+        from core.robot_factory import get_all_robots
+
+        robots = get_all_robots(FreeCAD.ActiveDocument)
+        if len(robots) == 1:
+            return robots[0]
+        elif len(robots) > 1:
+            show_warning("Select Robot", "Multiple robots found. Please select one.")
+            return None
+        else:
+            show_warning("No Robot", "No robot found in document.")
+            return None
+
+    def _get_package_name_input(self, default_name):
         dlg = QDialog()
-        dlg.setWindowTitle("ROS 2 Package Name")
+        dlg.setWindowTitle("Package Name")
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Package name:"))
-        line_edit = QLineEdit(package_name)
+        layout.addWidget(QLabel("Enter ROS 2 Package Name:"))
+        line_edit = QLineEdit(default_name)
         layout.addWidget(line_edit)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept)
@@ -78,48 +158,10 @@ class CreateRosPackageCommand:
         layout.addWidget(btns)
         dlg.setLayout(layout)
 
-        if dlg.exec() != QDialog.Accepted:
-            return
-
-        package_name = line_edit.text().strip()
-        if not package_name:
-            QMessageBox.warning(None, "Invalid Name", "Package name cannot be empty.")
-            return
-
-        # Validate package name (basic)
-        if not package_name.replace("_", "").replace("-", "").isalnum():
-            QMessageBox.warning(
-                None,
-                "Invalid Name",
-                "Package name must contain only letters, numbers, underscores, or hyphens.",
-            )
-            return
-
-        try:
-            # Create package in workspace_root/src/
-            pkg_path = create_ros2_package(urdf_path, meshes_dir, package_name, src_dir)
-
-            FreeCAD.Console.PrintMessage(
-                f"[OmniROS] ✅ ROS 2 package created at:\n  {pkg_path}\n"
-            )
-
-            # Print next steps
-            rel_path = os.path.relpath(workspace_root, os.path.expanduser("~"))
-            build_cmd = (
-                f"cd ~/{rel_path} && colcon build --packages-select {package_name}"
-            )
-            FreeCAD.Console.PrintMessage(
-                f"[OmniROS] 💡 Next steps:\n"
-                f"  1. Build: {build_cmd}\n"
-                f"  2. Source: source install/setup.bash\n"
-                f"  3. Launch: ros2 launch {package_name} display.launch.py\n"
-            )
-
-        except Exception as e:
-            FreeCAD.Console.PrintError(f"[OmniROS] ❌ Package creation failed: {e}\n")
-            import traceback
-
-            FreeCAD.Console.PrintError(traceback.format_exc())
-
-    def IsActive(self):
-        return FreeCAD.ActiveDocument is not None
+        if dlg.exec() == QDialog.Accepted:
+            name = line_edit.text().strip()
+            if not name.replace("_", "").replace("-", "").isalnum():
+                show_warning("Invalid Name", "Use only alphanumerics and underscores.")
+                return None
+            return name
+        return None

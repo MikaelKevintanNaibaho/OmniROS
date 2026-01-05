@@ -1,62 +1,50 @@
-# tools/ros2_package_generator.py
+# core/ros2_package_generator.py
 """
 Generate a minimal ROS 2 package for a robot description.
 """
 
 import os
 import shutil
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
+import re
 
 
-def create_ros2_package(urdf_path, meshes_dir, package_name, output_ws_dir):
+def organize_package(package_path, package_name, urdf_name):
     """
-    Create a ROS 2 package containing the URDF and meshes.
+    Organize a raw export folder into a valid ROS 2 package structure.
 
     Args:
-        urdf_path (str): Path to the exported .urdf file
-        meshes_dir (str): Path to the meshes folder
-        package_name (str): ROS 2 package name (must be valid)
-        output_ws_dir (str): Path to the ROS 2 workspace 'src' directory
+        package_path: Root of the package (where urdf/meshes currently sit)
+        package_name: Name of the ROS 2 package
+        urdf_name: Filename of the generated URDF (e.g. 'my_robot.urdf')
 
     Returns:
-        str: Path to the created package
+        str: Path to the final URDF file
     """
-    if not os.path.isdir(output_ws_dir):
-        raise ValueError(f"Workspace src directory does not exist: {output_ws_dir}")
-    if not os.path.isfile(urdf_path):
-        raise FileNotFoundError(f"URDF not found: {urdf_path}")
-    if not os.path.isdir(meshes_dir):
-        raise FileNotFoundError(f"Meshes directory not found: {meshes_dir}")
+    # 1. Create directory structure
+    urdf_dir = os.path.join(package_path, "urdf")
+    launch_dir = os.path.join(package_path, "launch")
+    meshes_dir = os.path.join(package_path, "meshes")
 
-    package_path = os.path.join(output_ws_dir, package_name)
-    os.makedirs(package_path, exist_ok=True)
+    os.makedirs(urdf_dir, exist_ok=True)
+    os.makedirs(launch_dir, exist_ok=True)
+    os.makedirs(meshes_dir, exist_ok=True)
 
-    # Directories
-    os.makedirs(os.path.join(package_path, "meshes"), exist_ok=True)
-    os.makedirs(os.path.join(package_path, "urdf"), exist_ok=True)
+    # 2. Move URDF file to /urdf/
+    src_urdf = os.path.join(package_path, urdf_name)
+    dst_urdf = os.path.join(urdf_dir, urdf_name)
 
-    # Copy URDF to urdf/
-    urdf_dest = os.path.join(package_path, "urdf", os.path.basename(urdf_path))
-    shutil.copy2(urdf_path, urdf_dest)
+    if os.path.exists(src_urdf):
+        shutil.move(src_urdf, dst_urdf)
 
-    # Copy meshes
-    for item in os.listdir(meshes_dir):
-        s = os.path.join(meshes_dir, item)
-        d = os.path.join(package_path, "meshes", item)
-        if os.path.isfile(s):
-            shutil.copy2(s, d)
+    # 3. Update URDF paths (package://package_name/meshes)
+    _update_urdf_package_path(dst_urdf, package_name)
 
-    # Fix URDF to use package://<package_name>
-    _update_urdf_package_path(urdf_dest, package_name)
-
-    # Create package.xml
+    # 4. Write Configuration Files
     _write_package_xml(package_path, package_name)
-
-    # Create CMakeLists.txt (for ament_cmake — simpler for pure description)
     _write_cmakelists(package_path, package_name)
+    _write_launch_file(launch_dir, package_name, urdf_name)
 
-    return package_path
+    return dst_urdf
 
 
 def _update_urdf_package_path(urdf_path, package_name):
@@ -66,8 +54,6 @@ def _update_urdf_package_path(urdf_path, package_name):
 
     # Normalize: replace any existing package://.../meshes or file://.../meshes
     # with package://<package_name>/meshes
-    import re
-
     content = re.sub(
         r'(filename=")(?:file://[^"]*?/meshes/|package://[^"]*?/meshes/)',
         f"\\1package://{package_name}/meshes/",
@@ -91,7 +77,9 @@ def _write_package_xml(package_path, package_name):
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>urdf</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
   <exec_depend>rviz2</exec_depend>
+  <exec_depend>xacro</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
@@ -114,7 +102,7 @@ find_package(ament_cmake REQUIRED)
 find_package(urdf REQUIRED)
 
 install(
-  DIRECTORY urdf meshes
+  DIRECTORY urdf meshes launch
   DESTINATION share/${{PROJECT_NAME}}
 )
 
@@ -122,3 +110,50 @@ ament_package()
 """
     with open(os.path.join(package_path, "CMakeLists.txt"), "w") as f:
         f.write(cmake)
+
+
+def _write_launch_file(launch_dir, package_name, urdf_filename):
+    """Create a standard display.launch.py"""
+    content = f"""import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    pkg_name = '{package_name}'
+    file_subpath = 'urdf/{urdf_filename}'
+
+    # Use xacro if needed, but for now we load raw URDF
+    urdf_file = os.path.join(get_package_share_directory(pkg_name), file_subpath)
+
+    with open(urdf_file, 'r') as infp:
+        robot_desc = infp.read()
+
+    return LaunchDescription([
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{{'robot_description': robot_desc}}],
+            arguments=[urdf_file]
+        ),
+        Node(
+            package='joint_state_publisher_gui',
+            executable='joint_state_publisher_gui',
+            name='joint_state_publisher_gui',
+            output='screen'
+        ),
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen',
+            # arguments=['-d', os.path.join(get_package_share_directory(pkg_name), 'config', 'view.rviz')]
+        ),
+    ])
+"""
+    with open(os.path.join(launch_dir, "display.launch.py"), "w") as f:
+        f.write(content)

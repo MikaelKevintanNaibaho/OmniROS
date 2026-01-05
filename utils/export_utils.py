@@ -34,25 +34,18 @@ def get_transform_str(placement):
     """
     # 1. Position (XYZ)
     v = placement.Base
-    xyz_str = f"{format_float(v.x / 1000.0)} {format_float(v.y / 1000.0)} {format_float(v.z / 1000.0)}"
-    # Note: FreeCAD uses mm, URDF uses meters. Divided by 1000.0.
+    xyz_str = f"{format_float(v.x / 1000.0)} {format_float(v.y / 1000.0)} {format_float(v.z / 1000.0)}"  # Note: FreeCAD uses mm, URDF uses meters. Divided by 1000.0.
 
     # 2. Rotation (RPY)
     # URDF uses Fixed Axis XYZ (which is equivalent to Intrinsic ZYX).
     # FreeCAD's toEuler() typically returns (yaw, pitch, roll) for ZYX.
     # We need to ensure we map them correctly.
 
-    # Get Euler angles in radians (FreeCAD standard)
-    # toEuler() returns 3 floats. By default, FreeCAD uses ZYX convention.
-    # The return order is usually (Yaw, Pitch, Roll) or (A, B, C) corresponding to Z, Y, X.
-    # URDF expects "Roll Pitch Yaw" string.
+    # 2. Rotation (RPY) - FIX: Map FreeCAD (Yaw, Pitch, Roll) to URDF (Roll, Pitch, Yaw)
+    # FreeCAD .toEuler() returns (Yaw, Pitch, Roll) for the standard ZYX sequence.
+    yaw, pitch, roll = placement.Rotation.toEuler()
 
-    matrix = placement.Rotation
-    r, p, y = matrix.toEuler()
-
-    # If the convention matches, we format them directly.
-    rpy_str = f"{format_float(r)} {format_float(p)} {format_float(y)}"
-
+    rpy_str = f"{format_float(yaw)} {format_float(pitch)} {format_float(roll)}"
     return xyz_str, rpy_str
 
 

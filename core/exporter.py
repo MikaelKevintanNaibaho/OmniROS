@@ -147,19 +147,25 @@ class UrdfExporter:
         """Generate <link> tag and export meshes."""
         link_elem = SubElement(self.xml_root, "link", name=link_obj.Label)
 
-        # 1. Inertial (Basic Placeholder - FreeCAD mass calc is complex to automate reliably without material)
-        inertial = SubElement(link_elem, "inertial")
-        SubElement(inertial, "mass", value="1.0")
-        SubElement(
-            inertial,
-            "inertia",
-            ixx="0.1",
-            ixy="0",
-            ixz="0",
-            iyy="0.1",
-            iyz="0",
-            izz="0.1",
-        )
+        # check if this the base_link?
+        # find the base link using helper method to compare
+        base_link = self._find_base_link()
+        is_root = (base_link is not None) and (link_obj.Label == base_link.Label)
+
+        # Rule: Skip inertia for the root link to satisfy KDL/ROS standards
+        if not is_root:
+            inertial = SubElement(link_elem, "inertial")
+            SubElement(inertial, "mass", value="1.0")
+            SubElement(
+                inertial,
+                "inertia",
+                ixx="0.1",
+                ixy="0",
+                ixz="0",
+                iyy="0.1",
+                iyz="0",
+                izz="0.1",
+            )
 
         # 2. Geometry (Visual/Collision)
         self._process_geometry(link_elem, link_obj, "visual")
@@ -197,7 +203,7 @@ class UrdfExporter:
             # Mesh tag
             geometry = SubElement(geom_elem, "geometry")
             mesh_uri = f"package://{self.robot_name}/meshes/{filename}"
-            SubElement(geometry, "mesh", filename=mesh_uri)
+            SubElement(geometry, "mesh", filename=mesh_uri, scale="0.001 0.001 0.001")
 
             # Material (visual only)
             if geom_type == "visual":
