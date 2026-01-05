@@ -96,8 +96,19 @@ class AssembleJointCommand:
             new_link_placement = target_global.multiply(child_lcs_local.inverse())
             child_link.Placement = new_link_placement
 
+            # Detect robot container
+            robot_container = None
+            try:
+                from core.robot_factory import find_parent_robot
+
+                robot_container = find_parent_robot(parent_link)
+            except:
+                pass
+
             # Create joint object
-            create_joint(parent_link, child_link, joint_name, joint_type)
+            create_joint(
+                parent_link, child_link, joint_name, joint_type, robot_container
+            )
 
             FreeCAD.ActiveDocument.commitTransaction()
 

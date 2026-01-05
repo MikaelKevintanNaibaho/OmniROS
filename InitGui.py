@@ -45,6 +45,10 @@ class OmniROSWorkbench(FreeCADGui.Workbench):
             sys.path.append(self.wb_path)
 
         # --- 4. Import and Register ---
+        from gui.cmd_create_robot import CreateRobotCommand
+
+        FreeCADGui.addCommand("OmniROS_CreateRobot", CreateRobotCommand())
+
         # Now it is safe to import
         from gui.place_lcs_command import PlaceLCSCommand
 
@@ -67,6 +71,7 @@ class OmniROSWorkbench(FreeCADGui.Workbench):
         FreeCADGui.addCommand("OmniROS_AssembleJoint", AssembleJointCommand())
 
         tools = [
+            "OmniROS_CreateRobot",
             "OmniROS_PlaceLCS",
             "OmniROS_TagLCS",
             "OmniROS_CreateLink",

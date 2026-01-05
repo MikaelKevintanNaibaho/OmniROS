@@ -53,12 +53,20 @@ class CreateLinkCommand:
         )
         if not link_name:
             return
+        # Detect robot container from selection
+        robot_container = None
+        try:
+            from core.robot_factory import find_parent_robot
+
+            robot_container = find_parent_robot(obj)
+        except:
+            pass
 
         # Create the link
         try:
             from core.link_factory import create_link_from_object
 
-            create_link_from_object(obj, link_name)
+            create_link_from_object(obj, link_name, robot_container)
             FreeCAD.Console.PrintMessage(f"[OmniROS] Created link '{link_name}'\n")
         except Exception as e:
             FreeCAD.Console.PrintError(f"[OmniROS] Link creation failed: {e}\n")

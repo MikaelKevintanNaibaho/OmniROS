@@ -57,7 +57,9 @@ class RosJointViewProxy:
         pass
 
 
-def create_joint(parent_link, child_link, joint_name, joint_type="revolute"):
+def create_joint(
+    parent_link, child_link, joint_name, joint_type="revolute", robot_container=None
+):
     """
     Create a ROS Joint object connecting two links.
 
@@ -66,6 +68,7 @@ def create_joint(parent_link, child_link, joint_name, joint_type="revolute"):
         child_link: App::Part representing child link
         joint_name: Name for the joint
         joint_type: Type of joint (default: "revolute")
+        robot_container: Optional robot container to add joint to
 
     Returns:
         App::FeaturePython: Created joint object
@@ -111,11 +114,8 @@ def create_joint(parent_link, child_link, joint_name, joint_type="revolute"):
         "Type of joint (revolute, fixed, etc.)",
     ).JointType = joint_type
 
-    # Add to joints group
-    from utils.hierarchy import find_or_create_group
-
-    joints_group = find_or_create_group(doc, "ROS_Joints", "ROS_Joints")
-    joints_group.addObject(joint_obj)
+    # Add to appropriate joints group
+    _add_joint_to_group(joint_obj, robot_container)
 
     FreeCAD.Console.PrintMessage(
         f"[OmniROS] Created Joint '{joint_name}' ({joint_type}): "
@@ -125,20 +125,63 @@ def create_joint(parent_link, child_link, joint_name, joint_type="revolute"):
     return joint_obj
 
 
-def get_all_joints(doc):
+def _add_joint_to_group(joint_obj, robot_container=None):
     """
-    Get all ROS Joint objects in a document.
+    Add joint to appropriate group (robot's Joints group or global ROS_Joints).
+
+    Args:
+        joint_obj: The joint object to add
+        robot_container: Optional robot container
+    """
+    doc = joint_obj.Document
+
+    if robot_container:
+        # Add to robot's Joints group
+        from core.robot_factory import get_robot_groups
+
+        groups = get_robot_groups(robot_container)
+        if groups and groups["joints_group"]:
+            groups["joints_group"].addObject(joint_obj)
+            FreeCAD.Console.PrintMessage(
+                f"[OmniROS] Added joint to robot '{robot_container.RobotName}'\n"
+            )
+            return
+
+    # Fallback: Add to global ROS_Joints group (backward compatibility)
+    from utils.hierarchy import find_or_create_group
+
+    joints_group = find_or_create_group(doc, "ROS_Joints", "ROS_Joints")
+    joints_group.addObject(joint_obj)
+
+
+def get_all_joints(doc, robot_container=None):
+    """
+    Get all ROS Joint objects in a document or robot container.
 
     Args:
         doc: FreeCAD document
+        robot_container: Optional robot container to filter by
 
     Returns:
         list: All joint FeaturePython objects
     """
     joints = []
-    joints_group = doc.getObject("ROS_Joints")
-    if joints_group:
-        joints = [obj for obj in joints_group.Group if hasattr(obj, "JointType")]
+
+    if robot_container:
+        # Get joints from robot's Joints group
+        from core.robot_factory import get_robot_groups
+
+        groups = get_robot_groups(robot_container)
+        if groups and groups["joints_group"]:
+            joints = [
+                obj for obj in groups["joints_group"].Group if hasattr(obj, "JointType")
+            ]
+    else:
+        # Get joints from global ROS_Joints group
+        joints_group = doc.getObject("ROS_Joints")
+        if joints_group:
+            joints = [obj for obj in joints_group.Group if hasattr(obj, "JointType")]
+
     return joints
 
 

@@ -68,7 +68,15 @@ class CreateJointCommand:
 
         # Create the joint object
         try:
-            create_joint(parent_link, child_link, joint_name, joint_type)
+            try:
+                from core.robot_factory import find_parent_robot
+
+                robot_container = find_parent_robot(parent_link)
+            except:
+                pass
+            create_joint(
+                parent_link, child_link, joint_name, joint_type, robot_container
+            )
             FreeCAD.ActiveDocument.recompute()
         except Exception as e:
             FreeCAD.Console.PrintError(f"[OmniROS] Joint creation failed: {e}\n")

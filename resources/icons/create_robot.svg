@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+    <!-- Background -->
+    <rect width="64" height="64" fill="#ffffff" />
+
+    <!-- Robot container box -->
+    <rect x="8" y="18" width="40" height="38" rx="2" fill="#E3F2FD" stroke="#1976D2"
+        stroke-width="2" />
+
+    <!-- Container label area -->
+    <rect x="8" y="18" width="40" height="8" fill="#1976D2" />
+    <text x="28" y="24" font-family="Arial" font-size="7" fill="#fff" text-anchor="middle"
+        font-weight="bold">ROBOT</text>
+
+    <!-- Links group icon (folder) -->
+    <g transform="translate(12, 30)">
+        <path d="M 0 2 L 0 12 L 16 12 L 16 4 L 12 4 L 10 2 Z" fill="#FFA726" stroke="#F57C00"
+            stroke-width="1" />
+        <text x="8" y="10" font-family="Arial" font-size="5" fill="#fff" text-anchor="middle"
+            font-weight="bold">Links</text>
+    </g>
+
+    <!-- Joints group icon (folder) -->
+    <g transform="translate(12, 42)">
+        <path d="M 0 2 L 0 12 L 16 12 L 16 4 L 12 4 L 10 2 Z" fill="#66BB6A" stroke="#388E3C"
+            stroke-width="1" />
+        <text x="8" y="10" font-family="Arial" font-size="5" fill="#fff" text-anchor="middle"
+            font-weight="bold">Joints</text>
+    </g>
+
+    <!-- Simple robot icon inside container -->
+    <g transform="translate(30, 32)">
+        <!-- Head -->
+        <circle cx="6" cy="4" r="3" fill="#90CAF9" stroke="#1976D2" stroke-width="1" />
+        <circle cx="5" cy="3.5" r="0.5" fill="#1976D2" />
+        <circle cx="7" cy="3.5" r="0.5" fill="#1976D2" />
+
+        <!-- Body -->
+        <rect x="3" y="7" width="6" height="8" rx="1" fill="#90CAF9" stroke="#1976D2"
+            stroke-width="1" />
+
+        <!-- Arms -->
+        <line x1="3" y1="9" x2="0" y2="12" stroke="#1976D2" stroke-width="1.5"
+            stroke-linecap="round" />
+        <line x1="9" y1="9" x2="12" y2="12" stroke="#1976D2" stroke-width="1.5"
+            stroke-linecap="round" />
+
+        <!-- Legs -->
+        <line x1="5" y1="15" x2="4" y2="20" stroke="#1976D2" stroke-width="1.5"
+            stroke-linecap="round" />
+        <line x1="7" y1="15" x2="8" y2="20" stroke="#1976D2" stroke-width="1.5"
+            stroke-linecap="round" />
+    </g>
+
+    <!-- Plus sign in circle (create action) -->
+    <circle cx="50" cy="50" r="10" fill="#4CAF50" stroke="#2E7D32" stroke-width="1.5" />
+    <line x1="50" y1="44" x2="50" y2="56" stroke="#fff" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="44" y1="50" x2="56" y2="50" stroke="#fff" stroke-width="2.5" stroke-linecap="round" />
+</svg>
