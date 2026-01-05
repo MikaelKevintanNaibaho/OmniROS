@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+    <!-- Document base -->
+    <path d="M12 8h32l8 8v36H12V8z" fill="#555555" />
+    <path d="M44 8v8h8" fill="#777777" />
+
+    <!-- URDF text (small, subtle) -->
+    <text x="16" y="20" font-family="Arial" font-size="6" fill="#ffffff">URDF</text>
+
+    <!-- Export arrow -->
+    <path d="M32 28v12M28 36l4 4 4-4" stroke="#ffffff" stroke-width="2" fill="none" />
+
+    <!-- Simple robot link (2 segments) -->
+    <circle cx="32" cy="24" r="4" fill="#228B22" />
+    <rect x="28" y="16" width="8" height="8" rx="2" fill="#228B22" />
+</svg>

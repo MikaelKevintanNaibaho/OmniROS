@@ -70,6 +70,14 @@ class OmniROSWorkbench(FreeCADGui.Workbench):
 
         FreeCADGui.addCommand("OmniROS_AssembleJoint", AssembleJointCommand())
 
+        from gui.cmd_export_urdf import ExportUrdfCommand
+
+        FreeCADGui.addCommand("OmniROS_ExportURDF", ExportUrdfCommand())
+
+        from gui.cmd_create_ros_package import CreateRosPackageCommand
+
+        FreeCADGui.addCommand("OmniROS_CreateROSPackage", CreateRosPackageCommand())
+
         tools = [
             "OmniROS_CreateRobot",
             "OmniROS_PlaceLCS",
@@ -77,6 +85,8 @@ class OmniROSWorkbench(FreeCADGui.Workbench):
             "OmniROS_CreateLink",
             "OmniROS_CreateJoint",
             "OmniROS_AssembleJoint",
+            "OmniROS_ExportURDF",
+            "OmniROS_CreateROSPackage",
         ]
         self.appendToolbar("OmniROS Tools", tools)
         self.appendMenu("OmniROS", tools)
